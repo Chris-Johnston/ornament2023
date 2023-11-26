@@ -48,3 +48,6 @@ c_cpp_properties.json
 *.vsix
 
 tmpout/*
+
+gerber_export
+gerber_export.zip

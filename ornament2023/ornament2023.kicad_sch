@@ -715,7 +715,6 @@
     )
   )
 
-
   (junction (at 142.24 105.41) (diameter 0) (color 0 0 0 0)
     (uuid 335d14bf-9f75-4e35-87d4-6cfc7f49f715)
   )
@@ -919,7 +918,7 @@
     (uuid fda53fef-7e81-4f57-802b-2435b47e1ffc)
   )
 
-  (text "No longer dependent on PB2,\nand so PWN on all pins exists\nnow"
+  (text "No longer dependent on PB2,\nand so PWM on all pins exists\nnow?"
     (at 39.37 62.23 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid c9b3296f-8a8a-43ae-8614-d51408bd451a)
