@@ -1,31 +1,23 @@
+// I never said this code wouldn't be messy.
+// Merry Christmas.
+
+#include <avr/io.h>
+// #include <avr/iotn404.h>
+#include <avr/interrupt.h>
 
 int pinMin = 0;
 int pinMax = 6;
 
 // pinList - goes clockwise from the top
-
-
 int pinlist[] = {
-  // top to bottom
-  // connected to pin 8
-  // 3, 1, 0, // 5,
-  // pin 9
-  // 6, 7, 10
   // right side
   6, 7, 10,
   // left side
   1, 0, 3
 };
 
-// 3, 1, 0, 5
-// PA7, PA5, PA4, PB2
-// 6, 7, 10
-// PB1, PB0, PA3
-// 8, 9
-// PA1, PA2
-
-int topCommon = 8;
-int bottomCommon = 9;
+int topCommon = 8; // left
+int bottomCommon = 9; // right
 
 // forward direction (0) is red (write 1 on pos)
 // otherwise green
@@ -33,8 +25,13 @@ int topColor = 0;
 int bottomColor = 0;
 
 // pin with the button
-int buttonIn = 2;
+int buttonIn = 2; // PA6
+#define PIN_BUTTON 2
+#define DEBOUNCE_TIME 150
+#define NUM_PATTERNS 10
+
 unsigned long lastDebounceTime = 0;
+unsigned long button_debounce = 0;
 
 int pattern = 0;
 
@@ -49,30 +46,102 @@ void setup() {
     pinMode(pinlist[i], OUTPUT);
   }
   pinMode(buttonIn, INPUT_PULLUP);
+
+  // enable PCINT0_vect for pin change
+  PORTA.PIN6CTRL |= PORT_ISC_FALLING_gc;
 }
 
-int lastButtonState = 0;
-int buttonState = 0;
-
-void handleDebounce()
+// these show alternating colors
+void xmascolors()
 {
-  bool reading = !digitalRead(buttonIn);
-  if (reading != lastButtonState)
+  int colorcycle = millis() / 1500 % 2;
+  for (int p = 0; p < pinMax; p++)
   {
-    lastDebounceTime = millis();
+    digitalWrite(pinlist[p], (p + colorcycle) % 2 == 1);
   }
-  if ((millis() - lastDebounceTime) > 50)
+
+  // static
+  // digitalWrite(topCommon, colorcycle);
+  // digitalWrite(bottomCommon, colorcycle);
+
+  // alternate the colors quickly
+  for (int i = 0; i < 100; i++)
   {
-    if (reading != buttonState)
+    digitalWrite(topCommon, colorcycle);
+    digitalWrite(bottomCommon, colorcycle);
+    
+    delay(1);
+
+    digitalWrite(topCommon, 1 ^ colorcycle);
+    digitalWrite(bottomCommon, 1 ^ colorcycle);
+
+    delay(1);
+  }
+}
+
+void loop()
+{
+  // handleDebounce();
+
+  switch (pattern)
+  {
+    // case 0:
+    //   // cycle();
+    //   // off();
+    //   break;
+    // case 1:
+    //   // too bright
+    //   // topColor = 1;
+    //   // bottomColor = 1;
+    //   // solid();
+    //   break;
+    case 0:
+      // testPattern();
+      xmascolors();
+      // wipeDown();
+      // solid is tooo bright
+      // topColor = 0;
+      // bottomColor = 0;
+      // solid();
+      break;
+    case 1:
+      blonk();
+      break;
+    case 2:
+      // may break if I end up using different resistors
+      dimGreen();
+      break;
+    case 3:
+      dimRed();
+      break;
+    case 4:
+      orange();
+      break;
+    case 5:
+      clockButNot();
+      break;
+    case 6:
+      wipeDown();
+      break;
+    default:
+      pattern = 0;
+      break;
+  }
+}
+
+ISR(PORTA_PORT_vect)
+{
+    // only update pattern if less than debounce time
+    auto time = millis();
+    if ((time - button_debounce) > DEBOUNCE_TIME)
     {
-      buttonState = reading;
-      if (reading)
-      {
-        pattern += 1;
-      }
+        pattern = (pattern + 1) % NUM_PATTERNS;
+
+        button_debounce = millis();
     }
-  }
-  lastButtonState = reading;
+
+    // Have to manually clear the interrupt flag
+    VPORTA.INTFLAGS |= (1 << 6);
 }
 
 void cycle() // too bright
@@ -98,25 +167,25 @@ void cycle() // too bright
 }
 
 int wipeDownIdx = 0;
-
 void wipeDown()
 {
-  if (wipeDownIdx == 0)
   {
-    bottomColor ^= 1;
+    if (wipeDownIdx == 0)
+    {
+      bottomColor ^= 1;
+    }
+    topColor = bottomColor;
+    off();
+    
+    digitalWrite(pinlist[wipeDownIdx], bottomColor ^ 1);
+    // delayMicroseconds(1500);
+    delay(10);
+    off();
+    delay(200);
+
+    wipeDownIdx = (wipeDownIdx + 1) % pinMax;
   }
-  topColor = bottomColor;
-  off();
-  
-  digitalWrite(pinlist[wipeDownIdx], bottomColor ^ 1);
-  delayMicroseconds(1500);
-  off();
-  delay(200);
-
-  wipeDownIdx = (wipeDownIdx + 1) % pinMax;
 }
-
-
 
 int getColor(int pin)
 {
@@ -143,10 +212,11 @@ void blonk()
   // delay(2);
 
   // maybe would want to tune this value based on battery? or color?
-  delayMicroseconds(1500);
+  // delayMicroseconds(3500 + random(200, 500));
+  delay(random(2, 30));
 
   off();
-  delay(random(200, 700));
+  delay(200);
 }
 
 void dimGreen()
@@ -155,16 +225,16 @@ void dimGreen()
   bottomColor = 1;
   solid();
 
-  auto buh = 50;
-  for (int i = 0; i < 100; i++)
-  {
-    // PORTA.OUTSET = 0b00000110;
-    PORTA.OUTTGL = 0b00000110;
-    delayMicroseconds(69);
-    // PORTA.OUTCLR = 0b00000110;
-    PORTA.OUTTGL = 0b00000110;
-    delayMicroseconds(1);
-  }
+  // auto buh = 50;
+  // for (int i = 0; i < 100; i++)
+  // {
+  //   // PORTA.OUTSET = 0b00000110;
+  //   PORTA.OUTTGL = 0b00000110;
+  //   delayMicroseconds(69);
+  //   // // PORTA.OUTCLR = 0b00000110;
+  //   // PORTA.OUTTGL = 0b00000110;
+  //   // delayMicroseconds(1);
+  // }
 }
 
 void testPattern()
@@ -201,7 +271,6 @@ void testPattern()
 
   off();
   delay(200);
-  
 }
 
 void dimRed()
@@ -210,16 +279,16 @@ void dimRed()
   bottomColor = 0;
   solid();
 
-  auto buh = 50;
-  for (int i = 0; i < 100; i++)
-  {
-    // PORTA.OUTSET = 0b00000110;
-    PORTA.OUTTGL = 0b00000110;
-    delayMicroseconds(69);
-    // PORTA.OUTCLR = 0b00000110;
-    PORTA.OUTTGL = 0b00000110;
-    delayMicroseconds(1);
-  }
+  // auto buh = 50;
+  // for (int i = 0; i < 100; i++)
+  // {
+  //   // PORTA.OUTSET = 0b00000110;
+  //   PORTA.OUTTGL = 0b00000110;
+  //   delayMicroseconds(69);
+  //   // PORTA.OUTCLR = 0b00000110;
+  //   PORTA.OUTTGL = 0b00000110;
+  //   delayMicroseconds(1);
+  // }
 }
 
 void orange()
@@ -333,67 +402,23 @@ void clockButNot()
     digitalWrite(pinlist[i], topColor ^ ((seconds & (1 << i)) >> i));
   }
 
-  uint8_t portaToggle = PORTA.OUT;
-  uint8_t portbToggle = PORTB.OUT;
+  // uint8_t portaToggle = PORTA.OUT;
+  // uint8_t portbToggle = PORTB.OUT;
   
-  for (int i = 0; i < 100; i++)
-  {
-    off();
-    delayMicroseconds(90);
+  // for (int i = 0; i < 100; i++)
+  // {
+  //   off();
+  //   delayMicroseconds(90);
 
-    PORTA.OUT = portaToggle;
-    PORTB.OUT = portbToggle;
-    delayMicroseconds(10);
-  }
+  //   PORTA.OUT = portaToggle;
+  //   PORTB.OUT = portbToggle;
+  //   delayMicroseconds(10);
+  // }
 
   
 }
 
-void loop()
-{
-  handleDebounce();
 
-  switch (pattern)
-  {
-    // case 0:
-    //   // cycle();
-    //   // off();
-    //   break;
-    // case 1:
-    //   // too bright
-    //   // topColor = 1;
-    //   // bottomColor = 1;
-    //   // solid();
-    //   break;
-    case 0:
-      testPattern();
-      // wipeDown();
-      // solid is tooo bright
-      // topColor = 0;
-      // bottomColor = 0;
-      // solid();
-      break;
-    case 1:
-      blonk();
-      break;
-    case 2:
-      // may break if I end up using different resistors
-      dimGreen();
-      break;
-    case 3:
-      dimRed();
-      break;
-    case 4:
-      orange();
-      break;
-    case 5:
-      clockButNot();
-      break;
-    default:
-      pattern = 0;
-      break;
-  }
-}
 
 void solid()
 {
