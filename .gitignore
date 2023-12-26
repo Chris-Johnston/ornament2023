@@ -51,3 +51,5 @@ tmpout/*
 
 gerber_export
 gerber_export.zip
+
+out/
